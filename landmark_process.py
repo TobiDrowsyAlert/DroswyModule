@@ -16,6 +16,12 @@ class landmark_process:
         #얼굴 주변 사각형 좌표 입력 함수
         self.face_rect=rect
 
+    def detect_driver(self):
+        #운전자 인식 여부 감지 함수
+        if not self.face or not self.face_rect:
+            return False
+        return True
+
     def get_eye_landmarks(self):
         #눈 좌표 추출 함수
         (rstart,rend)=face_utils.FACIAL_LANDMARKS_IDXS['right_eye']
