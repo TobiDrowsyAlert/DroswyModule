@@ -1,6 +1,5 @@
 from scipy.spatial import distance as dist
 from imutils import face_utils
-import dlib
 import numpy as np
 import math
 import cv2
@@ -154,11 +153,22 @@ class sleep_data_calc:
     #일반 변수
     __sleep_step=0
     __sleep_weight=0
+    __last_blink=0
     __last_yawn=0
     __last_sleep_weight=0
     __last_sleep_step=0
     __sleep_service_flag=True
-
+    """
+    sleep_service_flag는 초기 상태는 ture
+    졸음 단계가 상승하여 경고 서비스 수행 전이면 false, 경고 서비스 수행 이후에는 true
+    졸음 단계가 상승한 후 계속 경고를 보내지 않게 하기 위한 flag
+    """
+    __raise_sleep_step_flag=False
+    """
+    raise_sleep_step_flag는 초기 상태는 false
+    졸음 단계 상승 했으면 true, 상승하지 않았으면 false
+    운전자 인식 안됨, 눈 오래 감음과 같이 단발성이 아닌 유지되는 징후인 경우 단계를 한 번만 상승하기 위한 flag
+    """
     #졸음 징후 변수
     l_ear=0
     r_ear=0
@@ -194,25 +204,6 @@ class sleep_data_calc:
         self.m_ear_TRESH=data["m_ear"]
         self.blink_TRESHOLD=data["blink"]
 
-    def event_sleep_step(self):
-        if self.__sleep_weight==1:
-            if not self.__sleep_service_flag:
-                # 졸음 1단계 서비스
-                self.__sleep_service_flag=True
-                return self.get_sleep_data(self)
-        elif self.__sleep_weight==2:
-            if not self.__sleep_service_flag:
-                # 졸음 2단계 서비스
-                self.__sleep_service_flag = True
-                return self.get_sleep_data(self)
-        elif self.__sleep_weight==3:
-            if not self.__sleep_service_flag:
-                # 졸음 3단계 서비스
-                self.__sleep_service_flag = True
-                return self.get_sleep_data(self)
-        #else:
-            #예외 처리
-
     def raise_sleep_weight(self):
         #졸음 가중치 상승
         self.__last_sleep_weight=self.__sleep_weight
@@ -220,28 +211,26 @@ class sleep_data_calc:
         self.raise_sleep_step_by_weight(self)
 
     def raise_sleep_step(self):
-        #졸음 단계 상승
-        if self.__sleep_weight<5:
-            __sleep_service_flag = False
-            self.__last_sleep_weight = self.__sleep_weight
-            self.__sleep_weight=5
+        if self.__sleep_step<3:
+            self.__sleep_service_flag=False
             self.__last_sleep_step=self.__sleep_step
-            self.__sleep_step+1
-        elif self.__sleep_weight>7 and self.__sleep_weight<5:
-            __sleep_service_flag = False
-            self.__last_sleep_weight = self.__sleep_weight
-            self.__sleep_weight=7
-            self.__last_sleep_step = self.__sleep_step
-            self.__sleep_step+1
-        elif self.__sleep_weight>7 and self.__sleep_weight<7:
-            __sleep_service_flag = False
-            self.__last_sleep_weight = self.__sleep_weight
-            self.__sleep_weight=10
-            self.__last_sleep_step = self.__sleep_step
-            self.__sleep_step+1
+            self.__sleep_step+=1
+            if self.__sleep_step == 1:
+                self.__last_sleep_weight = self.__sleep_weight
+                self.__sleep_weight = 3
+
+            elif self.__sleep_step == 2:
+                self.__last_sleep_weight = self.__sleep_weight
+                self.__sleep_weight = 7
+
+            elif self.__sleep_step == 3:
+                self.__last_sleep_weight = self.__sleep_weight
+                self.__sleep_weight = 10
+        else:
+            self.__sleep_service_flag=False
 
     def raise_sleep_step_by_weight(self):
-        if self.__sleep_weight==5 and self.__sleep_step<1:
+        if self.__sleep_weight==3 and self.__sleep_step==0:
             self.raise_sleep_step(self)
 
         elif self.__sleep_weight==7 and self.__sleep_step==1:
@@ -250,20 +239,29 @@ class sleep_data_calc:
         elif self.__sleep_weight==10 and self.__sleep_step==2:
             self.raise_sleep_step(self)
 
+        elif self.__sleep_service_flag>=10 and self.__sleep_step==3:
+            if self.__sleep_service_flag:
+                self.raise_sleep_step(self)
+
     def cancle_sleep_weight(self):
         #졸음 가중치 상승 취소
         self.__sleep_weight=self.__last_sleep_weight
 
     def calc_sleep_data(self):
-        print(self.E_counter)
-        print(self.M_counter)
+        self.driver_counter=0
+        print("sleep_step:{}".format(self.__sleep_step))
+        print("sleep_weight:{}".format(self.__sleep_weight))
+        print("E_counter:{}".format(self.E_counter))
+        print("M_counter:{}".format(self.M_counter))
         #프레임별 졸음 징후 계산
         # 양 눈이 임계치 보다 작은 동안의 프레임 수를 측정
         if self.l_ear < self.ear_THRESH and self.r_ear < self.ear_THRESH:
             self.E_counter += 1
             #눈 감음
-            if self.E_counter>=180:
+            if self.E_counter>=120:
                 return self.blind_detection(self)
+            else:
+                self.__raise_sleep_step_flag=False
 
         # 양 눈이 임계치보다 큰 조건에 수행
         else:
@@ -287,31 +285,38 @@ class sleep_data_calc:
             self.M_counter = 0
 
         if self.blink_detection(self):
-            if not self.__sleep_service_flag:
-                self.sleep_code=self.C_BLINK
+            print("service_flag:{}".format(self.__sleep_service_flag))
+            if self.__sleep_service_flag==False:
+                return self.get_sleep_data(self,self.C_BLINK)
+            else:
+                return self.get_sleep_data(self,self.C_NOMAL)
 
-        if self.yawn_detection(self):
-            if not self.__sleep_service_flag:
-                self.sleep_code=self.C_YAWN
-
-        if not self.__sleep_service_flag:
-            return self.event_sleep_step(self)
+        elif self.yawn_detection(self):
+            if self.__sleep_service_flag==False:
+                return self.get_sleep_data(self,self.C_YAWN)
+            else:
+                return self.get_sleep_data(self, self.C_NOMAL)
         else:
-            self.sleep_code=self.C_NOMAL
-            return self.get_sleep_data(self)
+            return self.get_sleep_data(self,self.C_NOMAL)
 
     def blink_detection(self):
-        if self.blink > self.blink_THRESHOLD:
-            self.raise_sleep_weight(self)
-            return True
+        if self.blink>1 and (self.blink % self.blink_THRESHOLD)==0:
+            if self.__last_blink!=self.blink:
+                self.__last_blink=self.blink
+                #self.raise_sleep_weight(self)
+                self.raise_sleep_step(self)
+                return True
+            else:
+                return False
         else:
             return False
 
     def yawn_detection(self):
         if self.yawn > 1:
             if self.__last_yawn!=self.yawn:
-                self.raise_sleep_weight(self)
                 self.__last_yawn=self.yawn
+                #self.raise_sleep_weight(self)
+                self.raise_sleep_step(self)
                 return True
             else:
                 return False
@@ -319,38 +324,52 @@ class sleep_data_calc:
             return False
 
     def blind_detection(self):
-        self.sleep_code=self.C_BLIND
-        self.raise_sleep_step(self)
-
-        return self.event_sleep_step(self)
-
-    def angle_detection(self):
-        if abs(self.pitch)>25 or abs(self.roll)>30:
-            self.sleep_code=self.C_DIRVER_AWARE_FAIL
+        if self.__raise_sleep_step_flag==False:
             self.raise_sleep_step(self)
-            return self.event_sleep_step(self)
+            self.__raise_sleep_step_flag=True
+            return self.get_sleep_data(self,self.C_BLIND)
+        else:
+            return self.get_sleep_data(self,self.C_NOMAL)
+
 
     def no_driver(self):
-        self.driver_counter+1
-        self.angle_detection(self)
+        self.driver_counter+=1
+        print("sleep_step:{}".format(self.__sleep_step))
+        print("sleep_weight:{}".format(self.__sleep_weight))
+        print("driver_counter:{}".format(self.driver_counter))
 
-        if self.driver_counter>=300:
-            self.sleep_code=self.C_DRIVER_AWAY
-            self.raise_sleep_weight(self)
-            return self.event_sleep_step(self)
+        if self.driver_counter>=120:
+            print("service_flag:{}".format(self.__sleep_service_flag))
+            if self.__raise_sleep_step_flag==False:
+                # 운전자가 감지되었다가 정면을 제대로 주시하지 않는 경우
+                if abs(self.pitch) > 25 or abs(self.roll) > 30:
+                    self.raise_sleep_step(self)
+                    self.__raise_sleep_step_flag=True
+                    return self.get_sleep_data(self, self.C_DIRVER_AWARE_FAIL)
+                # 운전자가 아예 운전석에서 감지되지 않는 경우
+                else:
+                    self.raise_sleep_step(self)
+                    self.__raise_sleep_step_flag=True
+                    return self.get_sleep_data(self, self.C_DRIVER_AWAY)
+            else:
+                return self.get_sleep_data(self,self.C_NOMAL)
+
         else:
-            self.sleep_code=self.C_NOMAL
-            return self.get_sleep_data(self)
+            self.__raise_sleep_step_flag=False
+            return self.get_sleep_data(self,self.C_NOMAL)
 
-    def get_sleep_data(self):
+    def get_sleep_data(self,code):
         sleep_data=dict()
         sleep_data["sleep_step"]=self.__sleep_step
-        sleep_data["status_code"]=self.sleep_code
+        sleep_data["status_code"]=code
         sleep_data["blink"]=self.blink
         sleep_data["yawn"]=self.yawn
         sleep_data["pitch"]=self.pitch
         sleep_data["yaw"]=self.yaw
         sleep_data["roll"]=self.roll
+
+        if code!=self.C_NOMAL:
+            self.__sleep_service_flag=True
 
         return sleep_data
 
