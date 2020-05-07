@@ -3,6 +3,7 @@ from imutils import face_utils
 import numpy as np
 import math
 import cv2
+import queue
 class landmark_process:
     face=0
     face_rect=0
@@ -155,8 +156,8 @@ class sleep_data_calc:
     __sleep_weight=0
     __last_blink=0
     __last_yawn=0
-    __last_sleep_weight=0
-    __last_sleep_step=0
+    __last_sleep_weight_queue=queue.Queue()
+    __last_sleep_step_queue=queue.Queue()
     __sleep_service_flag=True
     """
     sleep_service_flag는 초기 상태는 ture
@@ -184,9 +185,10 @@ class sleep_data_calc:
     ear_THRESH=0.21
     m_ear_THRESH=0.4
     blink_THRESHOLD=21
-    blind_FRAME=180
-    blink_FRAME=3
-    yawn_FRAME=60
+    blind_FRAME=75
+    blink_FRAME=4
+    yawn_FRAME=50
+    driver_away_FRAME=75
     E_counter=0
     M_counter=0
     driver_counter=0
@@ -206,25 +208,25 @@ class sleep_data_calc:
 
     def raise_sleep_weight(self):
         #졸음 가중치 상승
-        self.__last_sleep_weight=self.__sleep_weight
+        self.__last_sleep_weight_queue.put(self.__sleep_weight)
         self.__sleep_weight=self.__sleep_weight+1
         self.raise_sleep_step_by_weight(self)
 
     def raise_sleep_step(self):
         if self.__sleep_step<3:
             self.__sleep_service_flag=False
-            self.__last_sleep_step=self.__sleep_step
+            self.__last_sleep_step_queue.put(self.__sleep_step)
             self.__sleep_step+=1
             if self.__sleep_step == 1:
-                self.__last_sleep_weight = self.__sleep_weight
+                self.__last_sleep_weight_queue.put(self.__sleep_weight)
                 self.__sleep_weight = 3
 
             elif self.__sleep_step == 2:
-                self.__last_sleep_weight = self.__sleep_weight
+                self.__last_sleep_weight_queue.put(self.__sleep_weight)
                 self.__sleep_weight = 7
 
             elif self.__sleep_step == 3:
-                self.__last_sleep_weight = self.__sleep_weight
+                self.__last_sleep_weight_queue.put(self.__sleep_weight)
                 self.__sleep_weight = 10
         else:
             self.__sleep_service_flag=False
@@ -245,7 +247,27 @@ class sleep_data_calc:
 
     def cancle_sleep_weight(self):
         #졸음 가중치 상승 취소
-        self.__sleep_weight=self.__last_sleep_weight
+        #이전 졸음 단계 기록이 없는 경우
+        if self.__last_sleep_step_queue.empty():
+            self.__sleep_step=0
+            #졸음 단계 0단계
+
+            #이전 졸음 가중치 기록이 없는 경우
+            if self.__last_sleep_weight_queue.empty():
+                self.__sleep_weight=0
+                #졸음 가중치 0
+            #이전 졸음 가중치 기록이 있는 경우
+            else:
+                self.__sleep_weight=self.__last_sleep_weight_queue.get()
+                #졸음 가중치 롤백
+        #이전 졸음 단계 기록이 있는 경우
+        else:
+            self.__sleep_step=self.__last_sleep_step_queue.get()
+            #졸음 단계 롤백
+            if self.__last_sleep_weight_queue.empty():
+                self.__sleep_weight=0
+            else:
+                self.__sleep_weight=self.__last_sleep_weight_queue.get()
 
     def calc_sleep_data(self):
         self.driver_counter=0
@@ -258,7 +280,7 @@ class sleep_data_calc:
         if self.l_ear < self.ear_THRESH and self.r_ear < self.ear_THRESH:
             self.E_counter += 1
             #눈 감음
-            if self.E_counter>=120:
+            if self.E_counter>=self.blind_FRAME:
                 return self.blind_detection(self)
             else:
                 self.__raise_sleep_step_flag=False
@@ -338,7 +360,7 @@ class sleep_data_calc:
         print("sleep_weight:{}".format(self.__sleep_weight))
         print("driver_counter:{}".format(self.driver_counter))
 
-        if self.driver_counter>=120:
+        if self.driver_counter>=self.driver_away_FRAME:
             print("service_flag:{}".format(self.__sleep_service_flag))
             if self.__raise_sleep_step_flag==False:
                 # 운전자가 감지되었다가 정면을 제대로 주시하지 않는 경우
