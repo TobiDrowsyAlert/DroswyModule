@@ -181,7 +181,7 @@ class sleep_data_calc:
     yawn=0
 
     #졸음 판단 데이터
-    sleep_code=0
+    status_code=0
     ear_THRESH=0.21
     m_ear_THRESH=0.4
     blink_THRESHOLD=21
@@ -189,6 +189,8 @@ class sleep_data_calc:
     blink_FRAME=4
     yawn_FRAME=50
     driver_away_FRAME=75
+
+    #프레임 카운터
     E_counter=0
     M_counter=0
     driver_counter=0
@@ -200,6 +202,39 @@ class sleep_data_calc:
         self.pitch=data["pitch"]
         self.roll=data["roll"]
         self.yaw=data["yaw"]
+
+    def reset_data(self):
+        #데이터 리셋 메소드
+
+        #졸음 단계 및 가중치 초기화
+        self.__sleep_step=0
+        self.__last_sleep_step_queue.queue.clear()
+        self.__sleep_weight=0
+        self.__last_sleep_weight_queue.queue.clear()
+
+        #졸음 징후 변수들 초기화
+        self.l_ear=0
+        self.r_ear=0
+        self.m_ear=0
+
+        self.yawn=0
+        self.blink=0
+
+        self.__last_blink=0
+        self.__last_yawn=0
+
+        self.yaw=0
+        self.pitch=0
+        self.roll=0
+
+        #플래그 값 초기화
+        self.__sleep_service_flag=True
+        self.__raise_sleep_step_flag=False
+
+        #프레임 카운터 초기화
+        self.E_counter=0
+        self.M_counter=0
+        self.driver_counter=0
 
     def set_persnal_data(self,data):
         self.ear_TRESH=data["e_ear"]
@@ -219,7 +254,7 @@ class sleep_data_calc:
             self.__sleep_step+=1
             if self.__sleep_step == 1:
                 self.__last_sleep_weight_queue.put(self.__sleep_weight)
-                self.__sleep_weight = 3
+                self.__sleep_weight = 4
 
             elif self.__sleep_step == 2:
                 self.__last_sleep_weight_queue.put(self.__sleep_weight)
@@ -232,7 +267,7 @@ class sleep_data_calc:
             self.__sleep_service_flag=False
 
     def raise_sleep_step_by_weight(self):
-        if self.__sleep_weight==3 and self.__sleep_step==0:
+        if self.__sleep_weight==4 and self.__sleep_step==0:
             self.raise_sleep_step(self)
 
         elif self.__sleep_weight==7 and self.__sleep_step==1:
@@ -245,7 +280,7 @@ class sleep_data_calc:
             if self.__sleep_service_flag:
                 self.raise_sleep_step(self)
 
-    def cancle_sleep_weight(self):
+    def cancle_sleep_step(self):
         #졸음 가중치 상승 취소
         #이전 졸음 단계 기록이 없는 경우
         if self.__last_sleep_step_queue.empty():
@@ -268,6 +303,34 @@ class sleep_data_calc:
                 self.__sleep_weight=0
             else:
                 self.__sleep_weight=self.__last_sleep_weight_queue.get()
+
+    def drop_sleep_step(self):
+        #졸음 단계를 낮추는 메소드
+        if self.__sleep_step>0:
+            if self.__sleep_step==1:
+                self.__sleep_step=0
+                self.__sleep_weight=0
+
+                self.__last_sleep_step_queue.queue.clear()
+                self.__last_sleep_weight_queue.queue.clear()
+
+            elif self.__sleep_step==2:
+                self.__sleep_step=1
+                self.__sleep_weight=4
+
+                self.__last_sleep_step_queue.get()
+                self.__last_sleep_weight_queue.get()
+
+            elif self.__sleep_step==3:
+                self.__sleep_step=2
+                self.__sleep_weight=7
+
+                self.__last_sleep_step_queue.get()
+                self.__last_sleep_weight_queue.get()
+
+        else:
+            self.__sleep_step = 0
+            self.__sleep_weight = 0
 
     def calc_sleep_data(self):
         self.driver_counter=0
@@ -381,6 +444,7 @@ class sleep_data_calc:
             return self.get_sleep_data(self,self.C_NOMAL)
 
     def get_sleep_data(self,code):
+        self.status_code=code
         sleep_data=dict()
         sleep_data["sleep_step"]=self.__sleep_step
         sleep_data["status_code"]=code
@@ -394,6 +458,10 @@ class sleep_data_calc:
             self.__sleep_service_flag=True
 
         return sleep_data
+
+    def print_sleep_data(self):
+        sleep_data=self.get_sleep_data(self,self.status_code)
+        print(sleep_data)
 
 
 
