@@ -24,8 +24,13 @@ def set_landmark():
 
         face_location=request.json
 
-        #운전자 인식 여부 변수 받음q
+        #운전자 인식 여부 변수 받음
         driver = face_location["driver"]
+
+        print(face_location["isCorrect"])
+        #피드백으로 졸음이 아닌 경우 단계 롤백
+        if face_location["isCorrect"]==False:
+            sleep_data_calc.cancle_sleep_step(sleep_data_calc)
 
         #운전자 인식 여부
         if driver:
@@ -40,6 +45,21 @@ def set_landmark():
             print(sleep_data)
         return jsonify(sleep_data)
 
+@app.route("/reset",methods=['POST'])
+def reset_data():
+    if request.method =='POST':
+        sleep_data_calc.reset_data(sleep_data_calc)
+        sleep_data_calc.print_sleep_data(sleep_data_calc)
+
+    return 0
+
+@app.route("/drop",methods=['POST'])
+def drop_sleep_step():
+    if request.method =='POST':
+        sleep_data_calc.drop_sleep_step(sleep_data_calc)
+        sleep_data_calc.print_sleep_data(sleep_data_calc)
+
+    return 0
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port="5000")
