@@ -6,7 +6,7 @@ import dlib
 import cv2
 #import json
 import requests
-#import ast
+
 
 #dlib에서 얼굴 식별을 위한 함수 호출
 print("[INFO] loading facial landmark predictor...")
@@ -28,6 +28,7 @@ frames=0
 #json 저장 딕셔너리
 face_location=dict()
 driver=False
+sleep_correct=True
 
 #비디오 쓰레드가 동작하는 동안 루프
 while True:
@@ -75,6 +76,7 @@ while True:
     face_location["rect"] = face_rect
     face_location["frame"] = frames
     face_location["driver"]=driver
+    face_location["isCorrect"]=sleep_correct
 
     #print(face_location)
     #rest API로 얼굴 좌표 전송
@@ -85,6 +87,12 @@ while True:
     print(sleep_data)
     #print(face_location)
 
+    """
+    if sleep_data["status_code"]==400:
+        sleep_correct=True
+    else:
+        sleep_correct=False
+    """
 
     #인식 중이 아니면 초기화
     driver=False
