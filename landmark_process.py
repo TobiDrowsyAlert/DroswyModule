@@ -156,8 +156,8 @@ class sleep_data_calc:
     __sleep_weight=0
     __last_blink=0
     __last_yawn=0
-    __last_sleep_weight_queue=queue.Queue()
-    __last_sleep_step_queue=queue.Queue()
+    __last_sleep_weight_queue=queue.LifoQueue()
+    __last_sleep_step_queue=queue.LifoQueue()
     __sleep_service_flag=True
     """
     sleep_service_flag는 초기 상태는 ture
