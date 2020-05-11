@@ -396,6 +396,10 @@ class sleep_data_calc:
         else:
             return False
 
+    def reset_blink(self):
+        self.blink=0
+        self.__last_blink=0
+
     def yawn_detection(self):
         if self.yawn > 1:
             if self.__last_yawn!=self.yawn:
@@ -407,6 +411,10 @@ class sleep_data_calc:
                 return False
         else:
             return False
+
+    def reset_yawn(self):
+        self.yawn=0
+        self.__last_yawn=0
 
     def blind_detection(self):
         if self.__raise_sleep_step_flag==False:
@@ -443,26 +451,42 @@ class sleep_data_calc:
             self.__raise_sleep_step_flag=False
             return self.get_sleep_data(self,self.C_NOMAL)
 
-    def get_sleep_data(self,code):
-        self.status_code=code
-        sleep_data=dict()
-        sleep_data["sleep_step"]=self.__sleep_step
-        sleep_data["status_code"]=code
-        sleep_data["blink"]=self.blink
-        sleep_data["yawn"]=self.yawn
-        sleep_data["pitch"]=self.pitch
-        sleep_data["yaw"]=self.yaw
-        sleep_data["roll"]=self.roll
+    def get_sleep_data(self,code=None):
+        if code is None:
+            sleep_data = dict()
+            sleep_data["sleep_step"] = self.__sleep_step
+            sleep_data["status_code"] = self.status_code
+            sleep_data["blink"] = self.blink
+            sleep_data["yawn"] = self.yawn
+            sleep_data["pitch"] = self.pitch
+            sleep_data["yaw"] = self.yaw
+            sleep_data["roll"] = self.roll
+            sleep_data["left_ear"] = self.l_ear
+            sleep_data["right_ear"] = self.r_ear
+            sleep_data["m_ear"] = self.m_ear
 
-        if code!=self.C_NOMAL:
-            self.__sleep_service_flag=True
+            return sleep_data
 
-        return sleep_data
+        else:
+            self.status_code = code
+            sleep_data = dict()
+            sleep_data["sleep_step"] = self.__sleep_step
+            sleep_data["status_code"] = code
+            sleep_data["blink"] = self.blink
+            sleep_data["yawn"] = self.yawn
+            sleep_data["pitch"] = self.pitch
+            sleep_data["yaw"] = self.yaw
+            sleep_data["roll"] = self.roll
+
+            if code != self.C_NOMAL:
+                self.__sleep_service_flag = True
+                sleep_data["left_ear"] = self.l_ear
+                sleep_data["right_ear"] = self.r_ear
+                sleep_data["m_ear"] = self.m_ear
+
+            return sleep_data
 
     def print_sleep_data(self):
         sleep_data=self.get_sleep_data(self,self.status_code)
         print(sleep_data)
-
-
-
 
