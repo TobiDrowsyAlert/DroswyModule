@@ -20,17 +20,10 @@ pitch=roll=yaw=0
 def set_landmark():
     if request.method == 'POST':
         #서버로부터 좌표 정보 획득
-        #face_location = request.form.to_dict(flat=False)
-
         face_location=request.json
 
         #운전자 인식 여부 변수 받음
         driver = face_location["driver"]
-
-        print(face_location["isCorrect"])
-        #피드백으로 졸음이 아닌 경우 단계 롤백
-        if face_location["isCorrect"]==False:
-            sleep_data_calc.cancle_sleep_step(sleep_data_calc)
 
         #운전자 인식 여부
         if driver:
@@ -40,10 +33,23 @@ def set_landmark():
             sleep_data_calc.set_data(sleep_data_calc,landmark_process.return_sleep_data(landmark_process))
             sleep_data=sleep_data_calc.calc_sleep_data(sleep_data_calc)
             print(sleep_data)
+
+            return jsonify(sleep_data)
         else:
             sleep_data=sleep_data_calc.no_driver(sleep_data_calc)
             print(sleep_data)
-        return jsonify(sleep_data)
+
+            return jsonify(sleep_data)
+
+
+@app.route("/feedback",methods=['POST'])
+def get_feedback():
+    if request.method=='POST':
+        # 피드백으로 졸음이 아닌 경우 단계 롤백
+        sleep_data_calc.cancle_sleep_step(sleep_data_calc)
+
+    return "a"
+
 
 @app.route("/reset",methods=['POST'])
 def reset_data():
@@ -51,7 +57,8 @@ def reset_data():
         sleep_data_calc.reset_data(sleep_data_calc)
         sleep_data_calc.print_sleep_data(sleep_data_calc)
 
-    return 0
+    return "a"
+
 
 @app.route("/drop",methods=['POST'])
 def drop_sleep_step():
@@ -59,7 +66,15 @@ def drop_sleep_step():
         sleep_data_calc.drop_sleep_step(sleep_data_calc)
         sleep_data_calc.print_sleep_data(sleep_data_calc)
 
-    return 0
+    return "a"
+
+@app.route("/timer",methods=['POST'])
+def get_timer():
+    if request.method=='POST':
+        sleep_data=sleep_data_calc.get_sleep_data(sleep_data_calc)
+        sleep_data_calc.reset_blink(sleep_data_calc)
+
+        return jsonify(sleep_data)
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port="5000")
