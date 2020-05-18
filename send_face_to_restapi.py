@@ -30,6 +30,10 @@ face_location=dict()
 driver=False
 sleep_correct=True
 
+#로그인 데이터 전송
+userid="user"
+requests.post('http://127.0.0.1:5000/login', json=userid)
+
 #비디오 쓰레드가 동작하는 동안 루프
 while True:
     #출력 영상을 frame에 저장
@@ -41,6 +45,7 @@ while True:
 
     #회색조 영상에서 얼굴 식별
     rects = detector(gray, 0)
+
 
 
     #얼굴이 식별되는 동안 루프
@@ -72,11 +77,11 @@ while True:
 
 
     #dict 저장
+    face_location["userid"]=userid
     face_location["landmarks"] = face_landmarks
     face_location["rect"] = face_rect
     face_location["frame"] = frames
     face_location["driver"]=driver
-    face_location["isCorrect"]=sleep_correct
 
     #print(face_location)
     #rest API로 얼굴 좌표 전송
@@ -87,12 +92,10 @@ while True:
     print(sleep_data)
     #print(face_location)
 
-    """
-    if sleep_data["status_code"]==400:
-        sleep_correct=True
-    else:
-        sleep_correct=False
-    """
+
+    if sleep_data["status_code"]!=400 and sleep_data["sleep_step"]==3:
+        requests.post('http://127.0.0.1:5000/feedback', json=userid)
+
 
     #인식 중이 아니면 초기화
     driver=False
@@ -105,6 +108,7 @@ while True:
     if key == ord("q"):
         break
 
+requests.post('http://127.0.0.1:5000/logout', json=userid)
 #마무리
 cv2.destroyAllWindows()
 vs.stop()
