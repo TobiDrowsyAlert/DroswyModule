@@ -9,72 +9,138 @@ CORS(app)
 
 api = Api(app, version='1.0', title='myProject')
 
-#졸음 정보 딕셔너리 생성
-sleep_data=dict()
+userlist=dict()
 
-#졸음 정보 변수
-rear=lear=mear=0
-pitch=roll=yaw=0
+@app.route("/login",methods=['POST'])
+def check_userid():
+    global userlist
+    if request.method =='POST':
+        userid=request.json
+        print("login ID : {}".format(userid))
+
+        if not userid in userlist:
+
+            userlist[userid]=[landmark_process(),sleep_data_calc()]
+
+            return "a"
+
+        else:
+            return "b"
+
+@app.route("/logout",methods=['POST'])
+def delete_userid():
+    global userlist
+    if request.method =='POST':
+        userid=request.json
+        print("logout ID : {}".format(userid))
+
+        if userid in userlist:
+            del userlist[userid]
+
+            return "a"
+        else:
+            return "b"
 
 @app.route("/set_face",methods=['POST'])
 def set_landmark():
+    global userlist
     if request.method == 'POST':
         #서버로부터 좌표 정보 획득
-        face_location=request.json
-
+        app_data=request.json
         #운전자 인식 여부 변수 받음
-        driver = face_location["driver"]
+        userid=app_data["userid"]
+        driver = app_data["driver"]
 
-        #운전자 인식 여부
-        if driver:
-            landmark_process.set_face_landmarks(landmark_process, face_location['landmarks'])
-            landmark_process.set_face_rect(landmark_process, face_location['rect'])
+        #해당 id가 존재하면 수행
+        if userid in userlist:
+            print("sleep calcaultion of {}".format(userid))
+            userdata=userlist[userid]
+            # 운전자 인식 여부
+            if driver:
+                userdata[0].set_face_landmarks(app_data["landmarks"])
+                userdata[0].set_face_rect(app_data['rect'])
 
-            sleep_data_calc.set_data(sleep_data_calc,landmark_process.return_sleep_data(landmark_process))
-            sleep_data=sleep_data_calc.calc_sleep_data(sleep_data_calc)
-            print(sleep_data)
+                landmark_data=userdata[0].return_sleep_data()
+                userdata[1].set_data(landmark_data)
+                sleep_data=userdata[1].calc_sleep_data()
+                print(sleep_data)
+                return jsonify(sleep_data)
 
-            return jsonify(sleep_data)
-        else:
-            sleep_data=sleep_data_calc.no_driver(sleep_data_calc)
-            print(sleep_data)
-
-            return jsonify(sleep_data)
-
+            else:
+                sleep_data=userdata[1].no_driver()
+                return jsonify(sleep_data)
 
 @app.route("/feedback",methods=['POST'])
 def get_feedback():
+    global userlist
     if request.method=='POST':
         # 피드백으로 졸음이 아닌 경우 단계 롤백
-        sleep_data_calc.cancle_sleep_step(sleep_data_calc)
+        userid=request.json
 
+        if userid in userlist:
+            print("rollback sleep step of {}".format(userid))
+            userdata=userlist[userid]
+
+            userdata[1].cancle_sleep_step()
     return "a"
 
 
 @app.route("/reset",methods=['POST'])
 def reset_data():
-    if request.method =='POST':
-        sleep_data_calc.reset_data(sleep_data_calc)
-        sleep_data_calc.print_sleep_data(sleep_data_calc)
+    global userlist
+    if request.method == 'POST':
+        #졸음 단계 리셋
+        userid = request.json
 
-    return "a"
+        if userid in userlist:
+            print("reset sleep data of {}".format(userid))
+            userdata = userlist[userid]
 
+            userdata[1].reset_data()
+            userdata[1].print_sleep_data()
+            return "a"
 
 @app.route("/drop",methods=['POST'])
 def drop_sleep_step():
+    global userlist
     if request.method =='POST':
-        sleep_data_calc.drop_sleep_step(sleep_data_calc)
-        sleep_data_calc.print_sleep_data(sleep_data_calc)
+        #졸음 단계 하락
+        userid=request.json
 
-    return "a"
+        if userid in userlist:
+            print("drop sleep step of {}".format(userid))
+            userdata=userlist[userid]
+
+            userdata[1].drop_sleep_step()
+            userdata[1].print_sleep_data()
+
+            return "a"
 
 @app.route("/timer",methods=['POST'])
 def get_timer():
+    global userlist
     if request.method=='POST':
-        sleep_data=sleep_data_calc.get_sleep_data(sleep_data_calc)
-        sleep_data_calc.reset_blink(sleep_data_calc)
+        userid=request.json
 
-        return jsonify(sleep_data)
+        if userid in userlist:
+            print("timer actuation of {}".format(userid))
+            userdata=userlist[userid]
+
+            sleep_data=userdata[1].get_sleep_data()
+            print(sleep_data)
+            userdata[1].reset_blink()
+
+            return jsonify(sleep_data)
+
+@app.route("/lookuser",methods=['POST'])
+#접속한 유저 리스트 확인
+def lookup_user():
+    global userlist
+    if request.method=='POST':
+        userids=list(userlist.keys())
+        print(userids)
+
+        return jsonify(userids)
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port="5000")
