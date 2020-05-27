@@ -4,10 +4,11 @@ import numpy as np
 import math
 import cv2
 import queue
+
 class landmark_process:
-    __face=0
-    __face_rect=0
     def __init__(self):
+        __face = 0
+        __face_rect = 0
         print("landmark process 객체 생성")
 
     def set_face_landmarks(self,landmark):
@@ -145,6 +146,8 @@ class landmark_process:
 
 
 class sleep_data_calc:
+
+    #클래스 변수 선언
     #status code 정의
     __C_BLINK=100
     __C_BLIND=101
@@ -153,57 +156,63 @@ class sleep_data_calc:
     __C_DIRVER_AWARE_FAIL=301
     __C_NOMAL=400
 
-    #일반 변수
-    __sleep_step=0
-    __sleep_weight=0
-    __last_blink=0
-    __last_yawn=0
-    __last_sleep_weight_queue=queue.LifoQueue()
-    __last_sleep_step_queue=queue.LifoQueue()
-    __sleep_service_flag=True
-    """
-    sleep_service_flag는 초기 상태는 ture
-    졸음 단계가 상승하여 경고 서비스 수행 전이면 false, 경고 서비스 수행 이후에는 true
-    졸음 단계가 상승한 후 계속 경고를 보내지 않게 하기 위한 flag
-    """
-    __raise_sleep_step_flag=False
-    """
-    raise_sleep_step_flag는 초기 상태는 false
-    졸음 단계 상승 했으면 true, 상승하지 않았으면 false
-    운전자 인식 안됨, 눈 오래 감음과 같이 단발성이 아닌 유지되는 징후인 경우 단계를 한 번만 상승하기 위한 flag
-    """
-    #졸음 징후 변수
-    __l_ear=0
-    __r_ear=0
-    __m_ear=0
-    __yaw=0
-    __pitch=0
-    __roll=0
-    __blink=0
-    __yawn=0
-
-    #졸음 판단 데이터
-    __status_code=0
-    __ear_THRESH=0.21
-    __m_ear_THRESH=0.4
-    __blink_THRESHOLD=21
-    __blind_FRAME=75
-    __blink_FRAME=4
-    __yawn_FRAME=50
-    __driver_away_FRAME=75
-
-    #프레임 카운터
-    __E_counter=0
-    __M_counter=0
-    __driver_counter=0
-
     def __init__(self,data=None):
+
+        #인스턴스 변수 선언
+        # 일반 변수
+        self.__sleep_step = 0
+        self.__sleep_weight = 0
+        self.__last_blink = 0
+        self.__last_yawn = 0
+        self.__last_sleep_weight_queue = queue.LifoQueue()
+        self.__last_sleep_step_queue = queue.LifoQueue()
+        self.__sleep_service_flag = True
+        """
+        sleep_service_flag는 초기 상태는 ture
+        졸음 단계가 상승하여 경고 서비스 수행 전이면 false, 경고 서비스 수행 이후에는 true
+        졸음 단계가 상승한 후 계속 경고를 보내지 않게 하기 위한 flag
+        """
+        self.__raise_sleep_step_flag = False
+        """
+        raise_sleep_step_flag는 초기 상태는 false
+        졸음 단계 상승 했으면 true, 상승하지 않았으면 false
+        운전자 인식 안됨, 눈 오래 감음과 같이 단발성이 아닌 유지되는 징후인 경우 단계를 한 번만 상승하기 위한 flag
+        """
+        # 졸음 징후 변수
+        self.__l_ear = 0
+        self.__r_ear = 0
+        self.__m_ear = 0
+        self.__yaw = 0
+        self.__pitch = 0
+        self.__roll = 0
+        self.__blink = 0
+        self.__yawn = 0
+
+        # 졸음 판단 데이터
+        self.__status_code = 0
+        self.__ear_THRESH = 0.21
+        self.__m_ear_THRESH = 0.4
+        self.__blink_THRESHOLD = 21
+        self.__blind_FRAME = 75
+        self.__blink_FRAME = 4
+        self.__yawn_FRAME = 50
+        self.__driver_away_FRAME = 75
+
+        # 프레임 카운터
+        self.__E_counter = 0
+        self.__M_counter = 0
+        self.__driver_counter = 0
+
+        #개인화 데이터 삽입할 때,
         if data is not None:
             self.__ear_THRESH = data["e_ear"]
             self.__m_ear_THRESH = data["m_ear"]
             self.__blink_THRESHOLD = data["blink"]
+
             print("sleep step calc 객체 생성")
-        else:
+
+
+        else: #개인화 데이터 삽입이 없을 때
             print("sleep step calc 객체 생성")
 
     def set_data(self,data):
@@ -347,8 +356,8 @@ class sleep_data_calc:
         self.driver_counter=0
         print("sleep_step:{}".format(self.__sleep_step))
         print("sleep_weight:{}".format(self.__sleep_weight))
-        print("E_counter:{}".format(self.E_counter))
-        print("M_counter:{}".format(self.M_counter))
+        print("E_counter:{}".format(self.__E_counter))
+        print("M_counter:{}".format(self.__M_counter))
         #프레임별 졸음 징후 계산
         # 양 눈이 임계치 보다 작은 동안의 프레임 수를 측정
         if self.__l_ear < self.__ear_THRESH and self.__r_ear < self.__ear_THRESH:
