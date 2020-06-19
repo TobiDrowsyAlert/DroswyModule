@@ -15,31 +15,63 @@ userlist=dict()
 def check_userid():
     global userlist
     if request.method =='POST':
-        userid=request.json
+        appdata=request.json
+        userid=appdata["userId"]
         print("login ID : {}".format(userid))
-
+        messeage=dict()
         if not userid in userlist:
 
             userlist[userid]=[landmark_process(),sleep_data_calc()]
-
-            return "a"
+            msg="Login of {} was successful!".format(userid)
+            print(msg)
+            messeage["msg"]=msg
+            return jsonify(messeage)
 
         else:
-            return "b"
+            msg="Login of {} failed!"
+            print(msg)
+            print("ID {} already exists".format(userid))
+            messeage["msg"]=msg
+            return jsonify(messeage)
+
+@app.route("/personal",methods=['POST'])
+def set_personal_data():
+    global userlist
+    if request.method=='POST':
+        data=request.json
+        userid=data["userId"]
+        print(data)
+        message=dict()
+        if userid in userlist:
+            user=userlist[userid]
+
+            user[1].set_persnal_data(data)
+            msg=" ID {} set personal data".format(userid)
+            print(msg)
+            message["msg"]=msg
+            return jsonify(message)
 
 @app.route("/logout",methods=['POST'])
 def delete_userid():
     global userlist
     if request.method =='POST':
-        userid=request.json
+        appdata = request.json
+        userid = appdata["userId"]
         print("logout ID : {}".format(userid))
+        message=dict()
 
         if userid in userlist:
             del userlist[userid]
-
-            return "a"
+            msg="Logout of {} was successful!".format(userid)
+            print(msg)
+            message["msg"]=msg
+            return jsonify(message)
         else:
-            return "b"
+            msg="Logout of {} was failed!".format(userid)
+            print(msg)
+            print("ID {} does not exist".format(userid))
+            message["msg"]=msg
+            return jsonify(message)
 
 @app.route("/set_face",methods=['POST'])
 def set_landmark():
@@ -48,13 +80,14 @@ def set_landmark():
         #서버로부터 좌표 정보 획득
         app_data=request.json
         #운전자 인식 여부 변수 받음
-        userid=app_data["userid"]
+        userid=app_data["userId"]
         driver = app_data["driver"]
 
         #해당 id가 존재하면 수행
         if userid in userlist:
             print("sleep calcaultion of {}".format(userid))
             userdata=userlist[userid]
+
             # 운전자 인식 여부
             if driver:
                 userdata[0].set_face_landmarks(app_data["landmarks"])
@@ -75,14 +108,23 @@ def get_feedback():
     global userlist
     if request.method=='POST':
         # 피드백으로 졸음이 아닌 경우 단계 롤백
-        userid=request.json
+        appdata = request.json
+        userid = appdata["userId"]
+        message = dict()
 
         if userid in userlist:
             print("rollback sleep step of {}".format(userid))
             userdata=userlist[userid]
 
             userdata[1].cancle_sleep_step()
-    return "a"
+
+
+            msg="Feedback of ID {} was successful".format(userid)
+            print(msg)
+            message["msg"]=msg
+
+            return jsonify(message)
+
 
 
 @app.route("/reset",methods=['POST'])
@@ -90,23 +132,30 @@ def reset_data():
     global userlist
     if request.method == 'POST':
         #졸음 단계 리셋
-        userid = request.json
-
+        appdata = request.json
+        userid = appdata["userId"]
+        message=dict()
         if userid in userlist:
             print("reset sleep data of {}".format(userid))
             userdata = userlist[userid]
 
             userdata[1].reset_data()
             userdata[1].print_sleep_data()
-            return "a"
+
+            msg="Reset of ID {} was successful".format(userid)
+            print(msg)
+            message["msg"] = msg
+
+            return jsonify(message)
 
 @app.route("/drop",methods=['POST'])
 def drop_sleep_step():
     global userlist
     if request.method =='POST':
         #졸음 단계 하락
-        userid=request.json
-
+        appdata = request.json
+        userid = appdata["userId"]
+        message=dict()
         if userid in userlist:
             print("drop sleep step of {}".format(userid))
             userdata=userlist[userid]
@@ -114,21 +163,35 @@ def drop_sleep_step():
             userdata[1].drop_sleep_step()
             userdata[1].print_sleep_data()
 
-            return "a"
+            msg = "Drop sleep step of ID {} was successful".format(userid)
+            print(msg)
+            message["msg"] = msg
+
+            return jsonify(message)
+
 
 @app.route("/timer",methods=['POST'])
 def get_timer():
     global userlist
     if request.method=='POST':
-        userid=request.json
+        app_data = request.json
+        userid = app_data["userId"]
 
         if userid in userlist:
+            userdata = userlist[userid]
+            # 취약시간 여부
+            if app_data["isWeakTime"]:
+                userdata[1].senstitive_sleep_symptom()
+            else:
+                userdata[1].non_weak_time()
+
             print("timer actuation of {}".format(userid))
-            userdata=userlist[userid]
+
 
             sleep_data=userdata[1].get_sleep_data()
             print(sleep_data)
             userdata[1].reset_blink()
+            userdata[1].reset_nod()
 
             return jsonify(sleep_data)
 
