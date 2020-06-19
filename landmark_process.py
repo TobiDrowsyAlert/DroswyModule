@@ -156,17 +156,25 @@ class sleep_data_calc:
     __C_DIRVER_AWARE_FAIL=301
     __C_NOMAL=400
 
-    def __init__(self,data=None):
-
+    def __init__(self):
         #인스턴스 변수 선언
         # 일반 변수
         self.__sleep_step = 0
         self.__sleep_weight = 0
         self.__last_blink = 0
         self.__last_yawn = 0
+        self.__last_r_ear=0
+        self.__last_l_ear=0
+        self.__last_m_ear=0
+        self.__frequency_symptom=0
         self.__last_sleep_weight_queue = queue.LifoQueue()
         self.__last_sleep_step_queue = queue.LifoQueue()
+        self.__sensitive_yawn = False
+        self.__sensitive_blink=False
+        self.__nod_delay_flag=False
+        self.__blink_delay_flag=False
         self.__sleep_service_flag = True
+
         """
         sleep_service_flag는 초기 상태는 ture
         졸음 단계가 상승하여 경고 서비스 수행 전이면 false, 경고 서비스 수행 이후에는 true
@@ -181,39 +189,41 @@ class sleep_data_calc:
         # 졸음 징후 변수
         self.__l_ear = 0
         self.__r_ear = 0
+        self.__avg_ear=0
         self.__m_ear = 0
         self.__yaw = 0
         self.__pitch = 0
         self.__roll = 0
         self.__blink = 0
         self.__yawn = 0
+        self.__nod=0
 
         # 졸음 판단 데이터
         self.__status_code = 0
-        self.__ear_THRESH = 0.21
-        self.__m_ear_THRESH = 0.4
+        self.__ear_THRESHOLD = 0.2
+        self.__m_ear_THRESHOLD = 0.4
         self.__blink_THRESHOLD = 21
-        self.__blind_FRAME = 75
-        self.__blink_FRAME = 4
-        self.__yawn_FRAME = 50
-        self.__driver_away_FRAME = 75
+        self.__nod_angle_THRESHOLD=-15
+        self.__nod_THRESHOLD=3
+        self.__blind_FRAME = 50
+        self.__blink_FRAME = 1
+        self.__yawn_FRAME = 30
+        self.__driver_away_FRAME = 50
 
         # 프레임 카운터
-        self.__E_counter = 0
+        self.__blink_counter = 0
+        self.__blind_counter=0
         self.__M_counter = 0
         self.__driver_counter = 0
+        self.__nod_delay_counter=0
+        self.__nod_delay=10
+        self.__blink_delay_counter=0
+        self.__blink_delay=20
 
-        #개인화 데이터 삽입할 때,
-        if data is not None:
-            self.__ear_THRESH = data["e_ear"]
-            self.__m_ear_THRESH = data["m_ear"]
-            self.__blink_THRESHOLD = data["blink"]
+        #누적 ear 큐
+        self.__avg_ear_queue=queue.Queue(maxsize=5)
 
-            print("sleep step calc 객체 생성")
-
-
-        else: #개인화 데이터 삽입이 없을 때
-            print("sleep step calc 객체 생성")
+        print("sleep step calc 객체 생성")
 
     def set_data(self,data):
         self.__l_ear=data["l_ear"]
@@ -222,6 +232,7 @@ class sleep_data_calc:
         self.__pitch=data["pitch"]
         self.__roll=data["roll"]
         self.__yaw=data["yaw"]
+        self.__avg_ear=(self.__l_ear+self.__r_ear)/2
 
     def reset_data(self):
         #데이터 리셋 메소드
@@ -256,10 +267,66 @@ class sleep_data_calc:
         self.__M_counter=0
         self.__driver_counter=0
 
+    def sensitive_yawn(self):
+        self.__sensitive_yawn=True
+
+    def sensitive_blink(self):
+        self.__sensitive_blink=True
+
+    def sensitive_blind(self):
+        self.__blind_FRAME=30
+
+    def sensitive_no_driver(self):
+        self.__driver_away_FRAME=40
+        self.__nod_THRESHOLD=2
+
+    def sensitive_sleep_symptom(self):
+        self.sensitive_yawn()
+        self.sensitive_no_driver()
+        self.sensitive_blind()
+        self.sensitive_blink()
+
+
     def set_persnal_data(self,data):
-        self.__ear_TRESH=data["e_ear"]
-        self.__m_ear_TRESH=data["m_ear"]
-        self.__blink_TRESHOLD=data["blink"]
+        self.__ear_THRESHOLD=data["ear"]
+        self.__m_ear_THRESHOLD=data["mar"]
+
+        if data["isWeakTime"]==True:
+            self.sensitive_sleep_symptom()
+
+        self.__frequency_symptom=data["frequencyReason"]
+
+        if self.__frequency_symptom== "100":
+            self.sensitive_blink()
+        elif self.__frequency_symptom=="101":
+            self.sensitive_blind()
+        elif self.__frequency_symptom=="200":
+            self.sensitive_yawn()
+        elif self.__frequency_symptom=="300":
+            self.sensitive_no_driver()
+
+
+    def set_default_data(self):
+        self.__nod_THRESHOLD = 3
+        self.__blind_FRAME = 50
+        self.__yawn_FRAME = 30
+        self.__driver_away_FRAME = 50
+
+    def non_weak_time(self):
+        self.__nod_THRESHOLD = 3
+        self.__blind_FRAME = 50
+        self.__yawn_FRAME = 30
+        self.__driver_away_FRAME = 50
+
+        if self.__frequency_symptom == "100":
+            self.sensitive_blink()
+        elif self.__frequency_symptom == "101":
+            self.sensitive_blind()
+        elif self.__frequency_symptom == "200":
+            self.sensitive_yawn()
+        elif self.__frequency_symptom == "300":
+            self.sensitive_no_driver()
+
 
     def raise_sleep_weight(self):
         #졸음 가중치 상승
@@ -296,7 +363,7 @@ class sleep_data_calc:
         elif self.__sleep_weight==10 and self.__sleep_step==2:
             self.raise_sleep_step()
 
-        elif self.__sleep_service_flag>=10 and self.__sleep_step==3:
+        elif self.__sleep_weight>=10 and self.__sleep_step==3:
             if self.__sleep_service_flag:
                 self.raise_sleep_step()
 
@@ -353,31 +420,93 @@ class sleep_data_calc:
             self.__sleep_weight = 0
 
     def calc_sleep_data(self):
-        self.driver_counter=0
+        self.__driver_counter=0
+
+        #꾸벅거림 딜레이
+        if self.__nod_delay_flag:
+            self.__nod_delay_counter+=1
+            if self.__nod_delay_counter==self.__nod_delay:
+                self.__nod_delay_flag=False
+                self.__nod_delay_counter=0
+
         print("sleep_step:{}".format(self.__sleep_step))
         print("sleep_weight:{}".format(self.__sleep_weight))
-        print("E_counter:{}".format(self.__E_counter))
-        print("M_counter:{}".format(self.__M_counter))
+
         #프레임별 졸음 징후 계산
-        # 양 눈이 임계치 보다 작은 동안의 프레임 수를 측정
-        if self.__l_ear < self.__ear_THRESH and self.__r_ear < self.__ear_THRESH:
-            self.__E_counter += 1
-            #눈 감음
-            if self.__E_counter>=self.__blind_FRAME:
-                return self.__blind_detection()
+
+        if self.__avg_ear_queue.full():
+            self.__avg_ear_queue.get()
+            self.__avg_ear_queue.put(self.__avg_ear)
+
+            ear_list=list(self.__avg_ear_queue.queue)
+            ear_list.sort()
+            midian_ear=ear_list[2]
+            print("midian_ear: {}".format(midian_ear))
+            if midian_ear>self.__ear_THRESHOLD:
+                self.__blind_counter=0
+                if self.blink_detection():
+                    return self.get_sleep_data(self.__C_BLINK)
             else:
-                self.__raise_sleep_step_flag=False
-
-        # 양 눈이 임계치보다 큰 조건에 수행
+                if self.blind_detection():
+                    return self.get_sleep_data(self.__C_BLIND)
         else:
-            # 눈이 감겨있던 동안의 프레임을 검사하여 눈 깜빡임 계산
-            if self.__E_counter>= self.__blink_FRAME:
-                self.__blink += 1
-            # 프레임 수 초기화
-            self.__E_counter = 0
+            self.__avg_ear_queue.put(self.__avg_ear)
 
+        if self.yawn_detection():
+            return self.get_sleep_data(self.__C_YAWN)
+
+        return self.get_sleep_data(self.__C_NOMAL)
+
+    def blink_detection(self):
+        print("blink_counter:{}".format(self.__blink_counter))
+        print("blink_delay:{}".format(self.__blink_delay_counter))
+        #두 눈 ear 값의 평균이 임계치보다 작으면
+        if self.__avg_ear<self.__ear_THRESHOLD:
+            if not self.__blink_delay_flag:
+                self.__blink_counter+=1
+        else:
+            if self.__blink_counter>=self.__blink_FRAME:
+                self.__blink+=1
+                self.__blink_delay_counter = 0
+                self.__blink_delay_flag = True
+
+            self.__blink_counter = 0
+
+            if self.__blink_delay_flag:
+                # 눈 깜빡임 인식에 지연 부여
+                self.__blink_delay_counter += 1
+                if self.__blink_delay_counter == self.__blink_delay:
+                    self.__blink_delay_flag = False
+                    self.__blink_delay_counter = 0
+
+
+        if self.__blink>0 and (self.__blink % self.__blink_THRESHOLD)==0:
+            if self.__last_blink!=self.__blink:
+                self.__last_blink=self.__blink
+                self.raise_sleep_weight()
+                #취약시간이면 가중치 한 번 더 상승
+                if self.__sensitive_blink:
+                    self.raise_sleep_weight()
+                #self.raise_sleep_step()
+
+                if self.__sleep_service_flag == False:
+                    return True
+                else:
+                    return False
+            else:
+                return False
+        else:
+            return False
+
+    def reset_blink(self):
+        self.__blink=0
+        self.__last_blink=0
+
+    def yawn_detection(self):
+        self.__last_m_ear=self.__m_ear
+        print("M_counter:{}".format(self.__M_counter))
         # 입이 임계치보다 큰 동안 프레임 수 측정
-        if self.__m_ear > self.__m_ear_THRESH:
+        if self.__m_ear > self.__m_ear_THRESHOLD:
             self.__M_counter += 1
 
         # 입이 임계치보다 작은 조건 하에 수행
@@ -389,44 +518,19 @@ class sleep_data_calc:
             # 프레임 수 초기화
             self.__M_counter = 0
 
-        if self.blink_detection():
-            print("service_flag:{}".format(self.__sleep_service_flag))
-            if self.__sleep_service_flag==False:
-                return self.get_sleep_data(self.__C_BLINK)
-            else:
-                return self.get_sleep_data(self.__C_NOMAL)
-
-        elif self.yawn_detection():
-            if self.__sleep_service_flag==False:
-                return self.get_sleep_data(self.__C_YAWN)
-            else:
-                return self.get_sleep_data(self.__C_NOMAL)
-        else:
-            return self.get_sleep_data(self.__C_NOMAL)
-
-    def blink_detection(self):
-        if self.__blink>1 and (self.__blink % self.__blink_THRESHOLD)==0:
-            if self.__last_blink!=self.__blink:
-                self.__last_blink=self.__blink
-                #self.raise_sleep_weight(self)
-                self.raise_sleep_step()
-                return True
-            else:
-                return False
-        else:
-            return False
-
-    def reset_blink(self):
-        self.__blink=0
-        self.__last_blink=0
-
-    def yawn_detection(self):
         if self.__yawn > 1:
             if self.__last_yawn!=self.__yawn:
                 self.__last_yawn=self.__yawn
-                #self.raise_sleep_weight()
-                self.raise_sleep_step()
-                return True
+                self.raise_sleep_weight()
+                #취약시간이면 가중치 한번 더 상승
+                if self.__sensitive_yawn:
+                    self.raise_sleep_weight()
+                #self.raise_sleep_step()
+
+                if self.__sleep_service_flag == False:
+                    return True
+                else:
+                    return False
             else:
                 return False
         else:
@@ -437,72 +541,98 @@ class sleep_data_calc:
         self.__last_yawn=0
 
     def blind_detection(self):
-        if self.__raise_sleep_step_flag==False:
-            self.raise_sleep_step()
-            self.__raise_sleep_step_flag=True
-            return self.get_sleep_data(self.__C_BLIND)
-        else:
-            return self.get_sleep_data(self.__C_NOMAL)
-
-
-    def no_driver(self):
-        self.__driver_counter+=1
-        print("sleep_step:{}".format(self.__sleep_step))
-        print("sleep_weight:{}".format(self.__sleep_weight))
-        print("driver_counter:{}".format(self.__driver_counter))
-
-        if self.driver_counter>=self.__driver_away_FRAME:
-            print("service_flag:{}".format(self.__sleep_service_flag))
-            if self.__raise_sleep_step_flag==False:
-                # 운전자가 감지되었다가 정면을 제대로 주시하지 않는 경우
-                if abs(self.__pitch) > 25 or abs(self.__roll) > 30:
-                    self.raise_sleep_step()
-                    self.__raise_sleep_step_flag=True
-                    return self.get_sleep_data(self.__C_DIRVER_AWARE_FAIL)
-                # 운전자가 아예 운전석에서 감지되지 않는 경우
-                else:
-                    self.raise_sleep_step()
-                    self.__raise_sleep_step_flag=True
-                    return self.get_sleep_data(self.__C_DRIVER_AWAY)
+        print("blind_counter:{}".format(self.__blind_counter))
+        self.__blind_counter+=1
+        if self.__blind_counter>=self.__blind_FRAME:
+            if self.__raise_sleep_step_flag == False:
+                self.raise_sleep_step()
+                self.__raise_sleep_step_flag = True
+                return True
             else:
-                return self.get_sleep_data(self.__C_NOMAL)
-
+                return False
         else:
             self.__raise_sleep_step_flag=False
-            return self.get_sleep_data(self.__C_NOMAL)
+            return False
+
+    def no_driver(self):
+        self.__nod_delay_counter=0
+        #운전자 이탈 중 예외 : 우회전, 좌회전 등으로 옆 상황을 보는 경우
+        if (abs(self.__pitch) <= 30 and abs(self.__roll)) and abs(self.__yaw) >= 30:
+            print("Exception of No driver")
+
+        #운전자가 운전석에서 인식되지 않는 경우
+        else:
+            # 운전자가 꾸벅거리는 경우
+            if self.__pitch < self.__nod_angle_THRESHOLD:
+                print("nod : {}".format(self.__nod))
+                if not self.__nod_delay_flag:
+                    self.__nod += 1
+                    self.__nod_delay_flag = True
+                    if self.__nod > 0 and (self.__nod % self.__nod_THRESHOLD) == 0:
+                        if self.__raise_sleep_step_flag == False:
+                            self.raise_sleep_step()
+                            self.__raise_sleep_step_flag = True
+                            return self.get_sleep_data(self.__C_DRIVER_AWAY)
+
+            self.__driver_counter += 1
+            print("sleep_step:{}".format(self.__sleep_step))
+            print("sleep_weight:{}".format(self.__sleep_weight))
+            print("driver_counter:{}".format(self.__driver_counter))
+
+            if self.__driver_counter >= self.__driver_away_FRAME:
+                print("service_flag:{}".format(self.__sleep_service_flag))
+                if self.__raise_sleep_step_flag == False:
+                    self.raise_sleep_step()
+                    self.__raise_sleep_step_flag = True
+                    return self.get_sleep_data(self.__C_DRIVER_AWAY)
+                else:
+                    return self.get_sleep_data(self.__C_NOMAL)
+
+            else:
+                self.__raise_sleep_step_flag = False
+                return self.get_sleep_data(self.__C_NOMAL)
+
+    def reset_nod(self):
+        self.__nod=0
+
+    def store_last_data(self):
+        self.__last_r_ear=self.__r_ear
+        self.__last_l_ear=self.__l_ear
+        self.__last_m_ear=self.__m_ear
+
 
     def get_sleep_data(self,code=None):
+        sleep_data = dict()
+        sleep_data["sleep_step"] = self.__sleep_step
+        sleep_data["blink"] = self.__blink
+        sleep_data["yawn"] = self.__yawn
+        sleep_data["pitch"] = self.__pitch
+        sleep_data["yaw"] = self.__yaw
+        sleep_data["roll"] = self.__roll
         if code is None:
-            sleep_data = dict()
-            sleep_data["sleep_step"] = self.__sleep_step
             sleep_data["status_code"] = self.__status_code
-            sleep_data["blink"] = self.__blink
-            sleep_data["yawn"] = self.__yawn
-            sleep_data["pitch"] = self.__pitch
-            sleep_data["yaw"] = self.__yaw
-            sleep_data["roll"] = self.__roll
             sleep_data["left_ear"] = self.__l_ear
             sleep_data["right_ear"] = self.__r_ear
             sleep_data["m_ear"] = self.__m_ear
+            self.store_last_data()
 
             return sleep_data
 
         else:
             self.__status_code = code
-            sleep_data = dict()
-            sleep_data["sleep_step"] = self.__sleep_step
             sleep_data["status_code"] = code
-            sleep_data["blink"] = self.__blink
-            sleep_data["yawn"] = self.__yawn
-            sleep_data["pitch"] = self.__pitch
-            sleep_data["yaw"] = self.__yaw
-            sleep_data["roll"] = self.__roll
-            sleep_data["left_ear"] = self.__l_ear
-            sleep_data["right_ear"] = self.__r_ear
-            sleep_data["m_ear"] = self.__m_ear
 
             if code != self.__C_NOMAL:
                 self.__sleep_service_flag = True
+                sleep_data["left_ear"] = self.__last_l_ear
+                sleep_data["right_ear"] = self.__last_r_ear
+                sleep_data["m_ear"] = self.__last_m_ear
+                self.store_last_data()
+            else:
+                sleep_data["left_ear"] = self.__l_ear
+                sleep_data["right_ear"] = self.__r_ear
+                sleep_data["m_ear"] = self.__m_ear
+                self.store_last_data()
 
             return sleep_data
 
