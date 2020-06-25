@@ -166,6 +166,9 @@ class sleep_data_calc:
         self.__last_r_ear=0
         self.__last_l_ear=0
         self.__last_m_ear=0
+        self.__sum_r_ear=0
+        self.__sum_l_ear=0
+        self.__sum_m_ear=0
         self.__frequency_symptom=0
         self.__last_sleep_weight_queue = queue.LifoQueue()
         self.__last_sleep_step_queue = queue.LifoQueue()
@@ -464,9 +467,22 @@ class sleep_data_calc:
         if self.__avg_ear<self.__ear_THRESHOLD:
             if not self.__blink_delay_flag:
                 self.__blink_counter+=1
+
+                #눈 감았던 동안의 ear 값의 합 저장
+                self.__sum_l_ear+=self.__l_ear
+                self.__sum_r_ear+=self.__r_ear
         else:
             if self.__blink_counter>=self.__blink_FRAME:
                 self.__blink+=1
+
+                #눈 감았던 동안 최근 ear 값 저장
+                self.__last_l_ear=self.__sum_l_ear/self.__blink_counter
+                self.__last_r_ear=self.__sum_r_ear/self.__blink_counter
+
+                #ear 값의 합 초기화
+                self.__sum_r_ear=0
+                self.__sum_l_ear=0
+
                 self.__blink_delay_counter = 0
                 self.__blink_delay_flag = True
 
@@ -509,12 +525,20 @@ class sleep_data_calc:
         if self.__m_ear > self.__m_ear_THRESHOLD:
             self.__M_counter += 1
 
+            #입이 열렸던 동안 ear 값의 합 저장
+            self.__sum_m_ear+=self.__m_ear
+
         # 입이 임계치보다 작은 조건 하에 수행
         else:
             # 입이 열려있던 동안의 프레임을 측정하여 하품 수 계산
             if self.__M_counter >= self.__yawn_FRAME:
                 self.__yawn += 1
 
+                #최근 입이 열려있던 동안의 평균 ear 값 저장
+                self.__last_m_ear=self.__sum_m_ear/self.__M_counter
+
+                #ear 값 초기화
+                self.__sum_m_ear=0
             # 프레임 수 초기화
             self.__M_counter = 0
 
@@ -543,8 +567,22 @@ class sleep_data_calc:
     def blind_detection(self):
         print("blind_counter:{}".format(self.__blind_counter))
         self.__blind_counter+=1
+
+        # 눈 감았던 동안의 ear 값의 합 저장
+        self.__sum_l_ear += self.__l_ear
+        self.__sum_r_ear += self.__r_ear
+
         if self.__blind_counter>=self.__blind_FRAME:
             if self.__raise_sleep_step_flag == False:
+
+                # 눈 감았던 동안 최근 ear 값 저장
+                self.__last_l_ear = self.__sum_l_ear / self.__blind_counter
+                self.__last_r_ear = self.__sum_r_ear / self.__blind_counter
+
+                # ear 값의 합 초기화
+                self.__sum_r_ear = 0
+                self.__sum_l_ear = 0
+
                 self.raise_sleep_step()
                 self.__raise_sleep_step_flag = True
                 return True
@@ -595,11 +633,6 @@ class sleep_data_calc:
     def reset_nod(self):
         self.__nod=0
 
-    def store_last_data(self):
-        self.__last_r_ear=self.__r_ear
-        self.__last_l_ear=self.__l_ear
-        self.__last_m_ear=self.__m_ear
-
 
     def get_sleep_data(self,code=None):
         sleep_data = dict()
@@ -614,7 +647,6 @@ class sleep_data_calc:
             sleep_data["left_ear"] = self.__l_ear
             sleep_data["right_ear"] = self.__r_ear
             sleep_data["m_ear"] = self.__m_ear
-            self.store_last_data()
 
             return sleep_data
 
@@ -624,19 +656,32 @@ class sleep_data_calc:
 
             if code != self.__C_NOMAL:
                 self.__sleep_service_flag = True
-                sleep_data["left_ear"] = self.__last_l_ear
-                sleep_data["right_ear"] = self.__last_r_ear
-                sleep_data["m_ear"] = self.__last_m_ear
-                self.store_last_data()
+
+                if code == self.__C_BLIND or code == self.__C_BLINK:
+                    sleep_data["left_ear"] = self.__last_l_ear
+                    sleep_data["right_ear"] = self.__last_r_ear
+                    sleep_data["m_ear"] = self.__m_ear
+
+                elif code == self.__C_YAWN:
+                    sleep_data["left_ear"] = self.__l_ear
+                    sleep_data["right_ear"] = self.__r_ear
+                    sleep_data["m_ear"] = self.__last_m_ear
+
+                else:
+                    sleep_data["left_ear"] = self.__l_ear
+                    sleep_data["right_ear"] = self.__r_ear
+                    sleep_data["m_ear"] = self.__m_ear
+
+                return sleep_data
+
             else:
                 sleep_data["left_ear"] = self.__l_ear
                 sleep_data["right_ear"] = self.__r_ear
                 sleep_data["m_ear"] = self.__m_ear
-                self.store_last_data()
 
             return sleep_data
 
     def print_sleep_data(self):
-        sleep_data=self.get_sleep_data(self.__status_code)
+        sleep_data=self.get_sleep_data()
         print(sleep_data)
 
