@@ -4,6 +4,7 @@ import numpy as np
 import math
 import cv2
 import queue
+import random
 
 class landmark_process:
     def __init__(self):
@@ -208,6 +209,7 @@ class sleep_data_calc:
         self.__blink_THRESHOLD = 21
         self.__nod_angle_THRESHOLD=-15
         self.__nod_THRESHOLD=3
+        self.__no_driver_exception_THRESHOLD=30
         self.__blind_FRAME = 50
         self.__blink_FRAME = 1
         self.__yawn_FRAME = 30
@@ -225,6 +227,22 @@ class sleep_data_calc:
 
         #누적 ear 큐
         self.__avg_ear_queue=queue.Queue(maxsize=5)
+
+        #스트레칭 기능 변수
+        #self.__stretch_order=["pitch","roll","yaw"]
+        #self.__stretch_order_length=len(self.__stretch_order)
+        #다양한 각도에 대해 스트레칭을 구현했으나 실제 사용은 "roll" 각도에 대해서만 사용하기로 결정
+
+        self.__stretch_order_number=0
+
+        self.__stretch_start_flag=False
+        self.__stretch_end_flag=False
+        self.__positive_angle_flag=False
+        self.__negative_angle_flag=False
+
+        self.__stretch_pitch_threshold=20
+        self.__stretch_roll_threshold=15
+        self.__stretch_yaw_threshold=15
 
         print("sleep step calc 객체 생성")
 
@@ -269,6 +287,15 @@ class sleep_data_calc:
         self.__E_counter=0
         self.__M_counter=0
         self.__driver_counter=0
+
+    def reset_stretch_flag(self,finish=None):
+        self.__stretch_end_flag = False
+        self.__positive_angle_flag = False
+        self.__negative_angle_flag = False
+
+        if finish==True:
+            self.__stretch_start_flag=False
+
 
     def sensitive_yawn(self):
         self.__sensitive_yawn=True
@@ -595,7 +622,7 @@ class sleep_data_calc:
     def no_driver(self):
         self.__nod_delay_counter=0
         #운전자 이탈 중 예외 : 우회전, 좌회전 등으로 옆 상황을 보는 경우
-        if (abs(self.__pitch) <= 30 and abs(self.__roll)) and abs(self.__yaw) >= 30:
+        if (abs(self.__pitch) <= self.__no_driver_exception_THRESHOLD and abs(self.__roll)) and abs(self.__yaw) >= self.__no_driver_exeception_THRESHOLD:
             print("Exception of No driver")
 
         #운전자가 운전석에서 인식되지 않는 경우
@@ -632,6 +659,78 @@ class sleep_data_calc:
 
     def reset_nod(self):
         self.__nod=0
+
+    def stretch_angle(self,angle_type):
+        if self.__stretch_start_flag==True:
+            if angle_type=="pitch":
+                if abs(self.__pitch)>=self.__stretch_pitch_threshold and abs(self.__roll)<=self.__stretch_roll_threshold and abs(self.__yaw)<= self.__stretch_yaw_threshold:
+                    if self.__pitch>0:
+                        self.__positive_angle_flag=True
+                    else:
+                        self.__negative_angle_flag=True
+            elif angle_type=="roll":
+                if abs(self.__roll)>=self.__stretch_roll_threshold and abs(self.__pitch)<=self.__stretch_pitch_threshold and abs(self.__yaw)<=self.__stretch_yaw_threshold:
+                    if self.__roll>=0:
+                        self.__positive_angle_flag=True
+                    else:
+                        self.__negative_angle_flag=True
+            elif angle_type=="yaw":
+                if abs(self.__yaw)>=self.__stretch_yaw_threshold and abs(self.__pitch)<=self.__stretch_pitch_threshold and abs(self.__roll)<=self.__stretch_roll_threshold:
+                    if self.__yaw>0:
+                        self.__positive_angle_flag=True
+                    else:
+                        self.__negative_angle_flag=True
+
+            if self.__positive_angle_flag == True and self.__negative_angle_flag == True:
+                self.__stretch_end_flag=True
+                return True
+
+            else:
+                return False
+
+    def do_stretch(self):
+        stretch_data=dict()
+        #스트레칭 첫 시작 시
+        if self.__stretch_start_flag==False and self.__stretch_order_number==0:
+            #스트레칭 순서 랜덤으로 초기화
+            """
+            self.__stretch_order=random.sample(self.__stretch_order,3)
+            """
+            self.__stretch_start_flag=True
+
+        #angle_type=self.__stretch_order[self.__stretch_order_number]
+        angle_type="roll"
+        #랜덤으로 배열된 순서에 따라 스트레칭 수행
+        self.stretch_angle(angle_type)
+
+        #스트레칭 관련 정보
+        stretch_data["angle_type"]=angle_type
+        stretch_data["start"]=self.__stretch_start_flag
+        stretch_data["end"]=self.__stretch_end_flag
+        stretch_data["positive"]=self.__positive_angle_flag
+        stretch_data["negative"]=self.__negative_angle_flag
+
+        #스트레칭 루프 한 단계 수행 종료 시
+        if self.__stretch_end_flag:
+            #스트레칭 순서를 다음 순서로 변경
+            self.__stretch_order_number=self.__stretch_order_number+1
+            stretch_data["count"] = self.__stretch_order_number
+
+            #스트레칭 순서 종료 시
+            if self.__stretch_order_number==3:
+                #스트레칭 관련 플래그 초기화
+                self.reset_stretch_flag(True)
+                #스트레칭 진행단계 초기화
+                self.__stretch_order=0
+            else:
+                self.reset_stretch_flag()
+        #스트레칭 루프가 종료 되지않은 경우
+        else:
+            stretch_data["count"] = self.__stretch_order_number
+
+
+        return stretch_data
+
 
 
     def get_sleep_data(self,code=None):
