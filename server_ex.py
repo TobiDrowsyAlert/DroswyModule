@@ -103,6 +103,33 @@ def set_landmark():
                 sleep_data=userdata[1].no_driver()
                 return jsonify(sleep_data)
 
+@app.route("/stretch",methods=['POST'])
+def do_stretch():
+    global userlist
+    if request.method=='POST':
+        app_data = request.json
+        userid = app_data["userId"]
+        driver = app_data["driver"]
+
+        if userid in userlist:
+            print("do stertch of {}".format(userid))
+            userdata=userlist[userid]
+
+            if driver:
+                userdata[0].set_face_landmarks(app_data["landmarks"])
+                userdata[0].set_face_rect(app_data["rect"])
+
+                landmark_data=userdata[0].return_sleep_data()
+                userdata[1].set_data(landmark_data)
+                stretch_data=userdata[1].do_stretch()
+                return jsonify(stretch_data)
+            """
+            else:
+                sleep_data=userdata[1].no_driver()
+                return jsonify(sleep_data)
+            """
+
+
 @app.route("/feedback",methods=['POST'])
 def get_feedback():
     global userlist
