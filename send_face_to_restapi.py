@@ -32,7 +32,9 @@ sleep_correct=True
 
 #로그인 데이터 전송
 userid="user"
-requests.post('http://127.0.0.1:5000/login', json=userid)
+userdata=dict()
+userdata["userId"]=userid
+requests.post('http://127.0.0.1:5000/login', json=userdata)
 
 #비디오 쓰레드가 동작하는 동안 루프
 while True:
@@ -77,7 +79,7 @@ while True:
 
 
     #dict 저장
-    face_location["userid"]=userid
+    face_location["userId"]=userid
     face_location["landmarks"] = face_landmarks
     face_location["rect"] = face_rect
     face_location["frame"] = frames
@@ -86,15 +88,50 @@ while True:
     #print(face_location)
     #rest API로 얼굴 좌표 전송
     #res=requests.post('http://15.165.116.82:1234/set_face',json=face_location)
-    res = requests.post('http://127.0.0.1:5000/set_face', json=face_location)
-    print(type(res.json()))
-    sleep_data=res.json()
-    print(sleep_data)
+    #res = requests.post('http://127.0.0.1:5000/set_face', json=face_location)
+    res=requests.post('http://127.0.0.1:5000/stretch',json=face_location)
+ #   print(type(res.json()))
+    #sleep_data=res.json()
+    #print(sleep_data)
+    stretch_data=res.json()
+    print(stretch_data)
+    angle_type=stretch_data["angle_type"]
+    if stretch_data["start"]:
+        if not stretch_data["end"]:
+            if angle_type == "pitch":
+                if stretch_data["positive"] == False and stretch_data["negative"] == False:
+                    cv2.putText(frame, "stretch {} angle!!".format(angle_type), (150, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                elif stretch_data["positive"]==True and stretch_data["negative"]==False:
+                    cv2.putText(frame, "stretch oppsite direction!!", (150, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    cv2.putText(frame, "Please stretch downward direction!", (150, 200),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                elif stretch_data["negative"]==True and stretch_data["positive"]==False:
+                    cv2.putText(frame, "stretch oppsite direction!!", (150, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    cv2.putText(frame, "Please stretch upward direction!", (150, 200),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+            elif angle_type == "roll" or angle_type=="yaw":
+                if stretch_data["positive"] == False and stretch_data["negative"] == False:
+                    cv2.putText(frame, "stretch {} angle!!".format(angle_type), (150, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                elif stretch_data["positive"]==True and stretch_data["negative"]==False:
+                    cv2.putText(frame, "stretch oppsite direction!!", (150, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    cv2.putText(frame, "Please stretch right direction!", (150, 200),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                elif stretch_data["negative"]==True and stretch_data["positive"]==False:
+                    cv2.putText(frame, "stretch oppsite direction!!", (150, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    cv2.putText(frame, "Please stretch left direction!", (150, 200),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        else:
+            if stretch_data["count"]==3:
+                break
+
     #print(face_location)
-
-
-    if sleep_data["status_code"]!=400 and sleep_data["sleep_step"]==3:
-        requests.post('http://127.0.0.1:5000/feedback', json=userid)
 
 
     #인식 중이 아니면 초기화
@@ -108,7 +145,7 @@ while True:
     if key == ord("q"):
         break
 
-requests.post('http://127.0.0.1:5000/logout', json=userid)
+requests.post('http://127.0.0.1:5000/logout', json=userdata)
 #마무리
 cv2.destroyAllWindows()
 vs.stop()
