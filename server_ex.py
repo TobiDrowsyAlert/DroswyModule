@@ -123,11 +123,10 @@ def do_stretch():
                 userdata[1].set_data(landmark_data)
                 stretch_data=userdata[1].do_stretch()
                 return jsonify(stretch_data)
-            """
+
             else:
                 sleep_data=userdata[1].no_driver()
                 return jsonify(sleep_data)
-            """
 
 
 @app.route("/feedback",methods=['POST'])
