@@ -233,6 +233,9 @@ class sleep_data_calc:
         #self.__stretch_order_length=len(self.__stretch_order)
         #다양한 각도에 대해 스트레칭을 구현했으나 실제 사용은 "roll" 각도에 대해서만 사용하기로 결정
 
+        #스트레칭 타입
+        self.__stretch_type=["angle","mouth"]
+        self.__selected_stretch_type=""
         self.__stretch_order_number=0
 
         self.__stretch_start_flag=False
@@ -240,9 +243,27 @@ class sleep_data_calc:
         self.__positive_angle_flag=False
         self.__negative_angle_flag=False
 
+        self.__stretch_progress_flag=False
+
         self.__stretch_pitch_threshold=20
-        self.__stretch_roll_threshold=15
+        self.__stretch_roll_threshold=20
         self.__stretch_yaw_threshold=15
+
+        self.__stretch_positive_frame=0
+        self.__stretch_negative_frame=0
+        self.__stretch_angle_threshold=10
+
+        self.__stretch_mouth_threshold=0.4
+        self.__stretch_mouth_frame_threshold=30
+        self.__stretch_mouth_frame=0
+
+        self.__stretch_delay_flag=False
+        self.__stretch_delay_frame=0
+        self.__stretch_delay_threshold=50
+
+        #스트레칭이 종료되지 않고 오래 진행되면 강제 종료를 제어하는 변수
+        self.__stretch_shut_down_frame_threshold=1000
+        self.__stretch_shut_down_frame=0
 
         print("sleep step calc 객체 생성")
 
@@ -295,6 +316,9 @@ class sleep_data_calc:
 
         if finish==True:
             self.__stretch_start_flag=False
+            self.__stretch_order_number=0
+            self.__stretch_delay_flag=False
+            self.__stretch_progress_flag=False
 
 
     def sensitive_yawn(self):
@@ -451,6 +475,10 @@ class sleep_data_calc:
 
     def calc_sleep_data(self):
         self.__driver_counter=0
+
+        #스트레칭 수행 중이었으면 강제 종료
+        if self.__stretch_progress_flag==True:
+            self.stretch_shutdown()
 
         #꾸벅거림 딜레이
         if self.__nod_delay_flag:
@@ -622,8 +650,13 @@ class sleep_data_calc:
     def no_driver(self):
         self.__nod_delay_counter=0
         #운전자 이탈 중 예외 : 우회전, 좌회전 등으로 옆 상황을 보는 경우
-        if (abs(self.__pitch) <= self.__no_driver_exception_THRESHOLD and abs(self.__roll)) and abs(self.__yaw) >= self.__no_driver_exeception_THRESHOLD:
+        if (abs(self.__pitch) <= self.__no_driver_exception_THRESHOLD and abs(self.__roll)) and abs(self.__yaw) >= self.__no_driver_exception_THRESHOLD:
             print("Exception of No driver")
+
+            if self.__stretch_progress_flag==True:
+                return self.get_stretch_data()
+
+            return self.get_sleep_data(self.__C_NOMAL)
 
         #운전자가 운전석에서 인식되지 않는 경우
         else:
@@ -649,89 +682,237 @@ class sleep_data_calc:
                 if self.__raise_sleep_step_flag == False:
                     self.raise_sleep_step()
                     self.__raise_sleep_step_flag = True
+
+                    if self.__stretch_progress_flag==True:
+                        self.stretch_shutdown()
+
                     return self.get_sleep_data(self.__C_DRIVER_AWAY)
                 else:
                     return self.get_sleep_data(self.__C_NOMAL)
 
             else:
                 self.__raise_sleep_step_flag = False
+
+                #스트레칭 중에 운전자가 잠시 인식이 안된 경우
+                if self.__stretch_progress_flag==True:
+                    return self.get_stretch_data()
+
                 return self.get_sleep_data(self.__C_NOMAL)
 
     def reset_nod(self):
         self.__nod=0
 
     def stretch_angle(self,angle_type):
-        if self.__stretch_start_flag==True:
+        if self.__stretch_progress_flag==True:
             if angle_type=="pitch":
                 if abs(self.__pitch)>=self.__stretch_pitch_threshold and abs(self.__roll)<=self.__stretch_roll_threshold and abs(self.__yaw)<= self.__stretch_yaw_threshold:
                     if self.__pitch>0:
-                        self.__positive_angle_flag=True
+                        self.__stretch_negative_frame=0
+                        self.__stretch_positive_frame+=1
+
+                        if self.__stretch_positive_frame>=self.__stretch_angle_threshold:
+                            self.__positive_angle_flag=True
+                            self.__stretch_positive_frame=0
                     else:
-                        self.__negative_angle_flag=True
+                        self.__stretch_positive_frame=0
+                        self.__stretch_negative_frame+=1
+
+                        if self.__stretch_negative_frame>=self.__stretch_angle_threshold:
+                            self.__negative_angle_flag=True
+                            self.__stretch_negative_frame=0
+
+                elif abs(self.__pitch)<self.__stretch_pitch_threshold:
+                    self.__stretch_negative_frame=0
+                    self.__stretch_positive_frame=0
+
             elif angle_type=="roll":
                 if abs(self.__roll)>=self.__stretch_roll_threshold and abs(self.__pitch)<=self.__stretch_pitch_threshold and abs(self.__yaw)<=self.__stretch_yaw_threshold:
-                    if self.__roll>=0:
-                        self.__positive_angle_flag=True
+                    if self.__roll > 0:
+                        self.__stretch_negative_frame = 0
+                        self.__stretch_positive_frame += 1
+
+                        if self.__stretch_positive_frame >= self.__stretch_angle_threshold:
+                            self.__positive_angle_flag = True
+                            self.__stretch_positive_frame = 0
                     else:
-                        self.__negative_angle_flag=True
+                        self.__stretch_positive_frame = 0
+                        self.__stretch_negative_frame += 1
+
+                        if self.__stretch_negative_frame >= self.__stretch_angle_threshold:
+                            self.__negative_angle_flag = True
+                            self.__stretch_negative_frame = 0
+
+                elif abs(self.__roll) < self.__stretch_roll_threshold:
+                    self.__stretch_negative_frame = 0
+                    self.__stretch_positive_frame = 0
+
             elif angle_type=="yaw":
                 if abs(self.__yaw)>=self.__stretch_yaw_threshold and abs(self.__pitch)<=self.__stretch_pitch_threshold and abs(self.__roll)<=self.__stretch_roll_threshold:
-                    if self.__yaw>0:
-                        self.__positive_angle_flag=True
+                    if self.__yaw > 0:
+                        self.__stretch_negative_frame = 0
+                        self.__stretch_positive_frame += 1
+
+                        if self.__stretch_positive_frame >= self.__stretch_angle_threshold:
+                            self.__positive_angle_flag = True
+                            self.__stretch_positive_frame = 0
                     else:
-                        self.__negative_angle_flag=True
+                        self.__stretch_positive_frame = 0
+                        self.__stretch_negative_frame += 1
+
+                        if self.__stretch_negative_frame >= self.__stretch_angle_threshold:
+                            self.__negative_angle_flag = True
+                            self.__stretch_negative_frame = 0
+
+                elif abs(self.__yaw) < self.__stretch_yaw_threshold:
+                    self.__stretch_negative_frame = 0
+                    self.__stretch_positive_frame = 0
 
             if self.__positive_angle_flag == True and self.__negative_angle_flag == True:
+                self.__stretch_positive_frame=0
+                self.__stretch_negative_frame=0
                 self.__stretch_end_flag=True
                 return True
 
             else:
                 return False
 
+    def stretch_mouth(self):
+        if self.__stretch_progress_flag==True:
+            if self.__m_ear>=self.__stretch_mouth_threshold:
+                self.__stretch_mouth_frame+=1
+
+                if self.__stretch_mouth_frame>=self.__stretch_mouth_frame_threshold:
+
+                    self.__stretch_end_flag=True
+                    self.__stretch_mouth_frame=0
+                    return True
+            else:
+                self.__stretch_mouth_frame=0
+
+    def stretch_delay(self):
+        if self.__stretch_delay_flag==True:
+            self.__stretch_delay_frame+=1
+
+            if self.__stretch_delay_frame>=self.__stretch_delay_threshold:
+                self.__stretch_delay_flag=False
+                self.__stretch_delay_frame=0
+                return True
+            return False
+
+    def stretch_shutdown(self):
+        if self.__stretch_shut_down_frame >= self.__stretch_shut_down_frame_threshold:
+            self.__stretch_shut_down_frame=0
+
+            self.__stretch_end_flag=True
+            self.__stretch_order_number=3
+
+            return self.get_stretch_data()
+
+        else:
+            self.__stretch_shut_down_frame=0
+
+            self.reset_stretch_flag(True)
+
+            return True
+
     def do_stretch(self):
-        stretch_data=dict()
+        self.__driver_counter=0
+
+        #스트레칭이 종료되지 않고 오래 유지될 시 강제 종료
+        if self.__stretch_progress_flag==True:
+            self.__stretch_shut_down_frame+=1
+
+            if self.__stretch_shut_down_frame>=self.__stretch_shut_down_frame_threshold:
+                return self.stretch_shutdown()
+
         #스트레칭 첫 시작 시
-        if self.__stretch_start_flag==False and self.__stretch_order_number==0:
+        if self.__stretch_progress_flag==False and self.__stretch_order_number==0:
             #스트레칭 순서 랜덤으로 초기화
             """
             self.__stretch_order=random.sample(self.__stretch_order,3)
             """
+
+            #스트레칭 타입 랜덤 선택
+            #self.__selected_stretch_type=random.choice(self.__stretch_type)
+
+            #스트레칭 타입 각도로 고정
+            self.__selected_stretch_type="angle"
+
+            #스트레칭 타입 입으로 고정
+            #self.__selected_stretch_type="mouth"
+
+            #스트레칭 진행 중 flag
+            self.__stretch_progress_flag=True
+
+            #스트레칭 시작 시점 flag
             self.__stretch_start_flag=True
 
+
+        if self.__stretch_progress_flag==True and self.__stretch_delay_flag==True:
+            #스트레칭 루프 이후에 스트레칭에 딜레이를 줌
+            self.stretch_delay()
+
         #angle_type=self.__stretch_order[self.__stretch_order_number]
-        angle_type="roll"
-        #랜덤으로 배열된 순서에 따라 스트레칭 수행
-        self.stretch_angle(angle_type)
 
-        #스트레칭 관련 정보
-        stretch_data["angle_type"]=angle_type
-        stretch_data["start"]=self.__stretch_start_flag
-        stretch_data["end"]=self.__stretch_end_flag
-        stretch_data["positive"]=self.__positive_angle_flag
-        stretch_data["negative"]=self.__negative_angle_flag
+        #딜레이 아닌 경우
+        if self.__stretch_delay_flag==False:
+            # 랜덤으로 선택된 스트레칭 타입에 따라 스트레칭 수행
+            if self.__selected_stretch_type == "angle":
+                # 얼굴 각도 스트레칭
+                self.stretch_angle("roll")
+            elif self.__selected_stretch_type == "mouth":
+                # 입 스트레칭
+                self.stretch_mouth()
 
-        #스트레칭 루프 한 단계 수행 종료 시
+        return self.get_stretch_data()
+
+    def get_stretch_data(self):
+        stretch_data=dict()
+        stretch_type=self.__selected_stretch_type
+
+        stretch_data["stretch_type"]=self.__selected_stretch_type
+        #스트레칭 종료 시작 여부
+        stretch_data["start"] = self.__stretch_start_flag
+        stretch_data["end"] = self.__stretch_end_flag
+
+        #시작 플래그는 스트레칭 루프 시작 순간만 True가 되도록 설정
+        if self.__stretch_start_flag==True:
+            self.__stretch_start_flag=False
+
+        #스트레칭 딜레이 여부
+        stretch_data["delay"] = self.__stretch_delay_flag
+
+        if stretch_type=="angle":
+            stretch_data["left"] = self.__positive_angle_flag
+            stretch_data["right"] = self.__negative_angle_flag
+            stretch_data["angle"] = self.__roll
+
+        # 스트레칭 루프 한 단계 수행 종료 시
         if self.__stretch_end_flag:
-            #스트레칭 순서를 다음 순서로 변경
-            self.__stretch_order_number=self.__stretch_order_number+1
+            # 스트레칭 횟수 증가
+            if self.__stretch_order_number<3:
+                self.__stretch_order_number = self.__stretch_order_number + 1
+
             stretch_data["count"] = self.__stretch_order_number
 
-            #스트레칭 순서 종료 시
-            if self.__stretch_order_number==3:
-                #스트레칭 관련 플래그 초기화
+            # 스트레칭 시작 알림
+            self.__stretch_start_flag=True
+
+            # 스트레칭 딜레이
+            self.__stretch_delay_flag=True
+
+            # 스트레칭 루프 종료 시
+            if self.__stretch_order_number == 3:
+                # 스트레칭 관련 플래그 및 횟수 초기화
                 self.reset_stretch_flag(True)
-                #스트레칭 진행단계 초기화
-                self.__stretch_order=0
             else:
+                #스트레칭 루프가 한 단계 종료되고 완전 종료는 아닌 경우
                 self.reset_stretch_flag()
-        #스트레칭 루프가 종료 되지않은 경우
+        # 스트레칭 루프가 종료 되지않은 경우
         else:
             stretch_data["count"] = self.__stretch_order_number
 
-
         return stretch_data
-
-
 
     def get_sleep_data(self,code=None):
         sleep_data = dict()
