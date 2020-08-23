@@ -95,9 +95,12 @@ while True:
     #print(sleep_data)
     stretch_data=res.json()
     print(stretch_data)
-    angle_type=stretch_data["angle_type"]
-    if stretch_data["start"]:
-        if not stretch_data["end"]:
+
+    stretch_type=stretch_data["stretch_type"]
+    if stretch_data["end"]==False:
+        if stretch_data["delay"]==False:
+            # 모든 각도에 대해서 스트레칭 하는 기능
+            """
             if angle_type == "pitch":
                 if stretch_data["positive"] == False and stretch_data["negative"] == False:
                     cv2.putText(frame, "stretch {} angle!!".format(angle_type), (150, 150),
@@ -127,9 +130,35 @@ while True:
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                     cv2.putText(frame, "Please stretch left direction!", (150, 200),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            """
+
+            if stretch_type == "angle":
+                if stretch_data["left"] == False and stretch_data["right"] == False:
+                    cv2.putText(frame, "stretch angle!!", (150, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                elif stretch_data["left"] == True and stretch_data["right"] == False:
+                    cv2.putText(frame, "stretch oppsite direction!!", (150, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    cv2.putText(frame, "Please stretch right direction!", (150, 200),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                elif stretch_data["right"] == True and stretch_data["left"] == False:
+                    cv2.putText(frame, "stretch oppsite direction!!", (150, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    cv2.putText(frame, "Please stretch left direction!", (150, 200),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+            elif stretch_type == "mouth":
+                cv2.putText(frame, "open your mouth and stretch!!", (150, 150),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
         else:
-            if stretch_data["count"]==3:
-                break
+            #스트레칭 루프 이후 딜레이
+            cv2.putText(frame, "come bacck to normal position!!", (150, 150),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+    else:
+        if stretch_data["count"]==3:
+            break
 
     #print(face_location)
 
